@@ -1,0 +1,376 @@
+
+package com.admin.service.impl;
+
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+
+import com.admin.config.JwtUtil;
+import com.admin.dto.ApprovalRequestDto;
+import com.admin.dto.GetUserDto;
+import com.admin.dto.GetUserDtoList;
+import com.admin.dto.LoginRequestDto;
+import com.admin.dto.LoginResponseDto;
+import com.admin.dto.Message;
+import com.admin.dto.UpdateUserDto;
+import com.admin.dto.UpdateUserPasswordDto;
+import com.admin.dto.UserDto;
+import com.admin.dto.UserResponse;
+import com.admin.model.User;
+import com.admin.repository.UserRepository;
+import com.admin.service.UserService;
+import com.admin.util.Constants;
+
+import jakarta.transaction.Transactional;
+import lombok.extern.log4j.Log4j2;
+
+@Log4j2
+@Service
+public class UserServiceImpl implements UserService {
+	@Autowired
+	private UserRepository userRepository;
+
+	@Autowired
+	private PasswordEncoder passwordEncoder;
+
+	@Autowired
+	private JwtUtil jwtUtil;
+
+	@Autowired
+	private AuthenticationManager authenticationManager;
+
+	@Autowired
+	private Message message;
+	private Set<String> blacklistedTokens = new HashSet<>();
+
+	@Override
+	public ResponseEntity<?> userRegistration(UserDto request) {
+
+		log.info("In UserServiceImpl userRegistration() with request :" + request);
+
+		User user = new User();
+		UserResponse userResponse = new UserResponse();
+		try {
+			userResponse.setEmail(request.getEmail());
+			userResponse.setRollId(request.getRollId());
+
+			boolean emailCheck = userRepository.existsByEmail(request.getEmail());
+			boolean empIdCheck = userRepository.existsByEmployeeId(request.getEmployeeId());
+
+			if (!emailCheck && !empIdCheck) {
+				user.setEmployeeId(request.getEmployeeId());
+				user.setUserName(request.getUserName());
+				user.setEmail(request.getEmail());
+				user.setDesignation(request.getDesignation());
+				user.setRollId(request.getRollId());
+				user.setDepartment(request.getDepartment());
+				user.setDeletedFlag(false);
+//				user.setCreatedBy(request.getCreatedBy());
+				user.setCreatedDate(LocalDate.now());
+
+				
+					userResponse.setMessage(Constants.WELCOME);
+				
+				String encodedPassword = passwordEncoder.encode(request.getPassword());
+				user.setPassword(encodedPassword);
+
+				userRepository.save(user);
+
+				return ResponseEntity.status(HttpStatus.CREATED).body(userResponse);
+			} else if (emailCheck) {
+				userResponse.setMessage(Constants.EMAIL_ALREADY_EXISTS);
+				return ResponseEntity.status(HttpStatus.CONFLICT).body(userResponse);
+			} else {
+				userResponse.setMessage(Constants.EMPLOYEE_ID_ALREADY_EXISTS);
+				return ResponseEntity.status(HttpStatus.CONFLICT).body(userResponse);
+			}
+		} catch (Exception e) {
+			log.error("Error occurred In UserServiceImpl userRegistration() :" + e.getMessage());
+			userResponse.setMessage(Constants.INTERNAL_SERVER_ERROR);
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(userResponse);
+		}
+	}
+
+	@Override
+	public ResponseEntity<?> userLogin(LoginRequestDto request) {
+
+		log.info("In UserServiceImpl userLogin() with request :" + request);
+		try {
+			User user = userRepository.getUserByEmail(request.getEmail());
+			if (user != null && !user.isDeletedFlag()) {
+			
+					try {
+						authenticationManager.authenticate(
+								new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
+					} catch (Exception ex) {
+						log.error("Error occurred In UserServiceImpl login() INVALID_USERNAME_PASSWORD:"
+								+ ex.getMessage());
+						message.setMessage(Constants.INVALID_PASSWORD);
+						return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(message);
+					}
+					LoginResponseDto responses = createLoginResponse(user);
+					String token = jwtUtil.generateToken(request.getEmail());
+					responses.setToken(token);
+					return ResponseEntity.status(HttpStatus.OK).body(responses);
+				
+			} else {
+				message.setMessage(Constants.USER_NOT_EXISTS_OR_DELETED);
+				return ResponseEntity.status(HttpStatus.CONFLICT).body(message);
+			}
+		} catch (Exception e) {
+
+			log.error("Error occurred In UserServiceImpl login() :" + e.getMessage());
+			message.setMessage(Constants.INTERNAL_SERVER_ERROR);
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(message);
+		}
+	}
+
+	@Override
+	public ResponseEntity<?> userUpdate(UpdateUserDto request) {
+		log.info("In UserServiceImpl userDetailsUpdate() with request :" + request);
+		User user = null;
+		try {
+			user = userRepository.getUserByEmployeeId(request.getEmployeeId());
+			if (user != null) {
+				user.setUserName(request.getUserName());
+				user.setDesignation(request.getDesignation());
+				user.setDepartment(request.getDepartment());
+
+				userRepository.save(user);
+				message.setMessage(Constants.UPDATE_SUCCESS);
+				return ResponseEntity.status(HttpStatus.OK).body(message);
+			} else {
+				message.setMessage(Constants.EMPLOYEE_ID_DOESNOT_EXIST);
+				return ResponseEntity.status(HttpStatus.CONFLICT).body(message);
+			}
+		} catch (Exception e) {
+			log.error("Error occurred In UserServiceImpl userDetailseUpdate() :" + e.getMessage());
+			message.setMessage(Constants.INTERNAL_SERVER_ERROR);
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(message);
+		}
+	}
+
+	@Override
+	public ResponseEntity<?> updatePassword(UpdateUserPasswordDto request) {
+		log.info("In UserServiceImpl UpdatePassword() with request :" + request);
+		try {
+			User user = userRepository.getUserByEmployeeId(request.getEmployeeId());
+			if (user != null && !user.isDeletedFlag()) {
+				String encodedPassword = passwordEncoder.encode(request.getPassword());
+				user.setPassword(encodedPassword);
+				userRepository.save(user);
+				message.setMessage(Constants.UPDATE_SUCCESS);
+				return ResponseEntity.status(HttpStatus.OK).body(message);
+			} else {
+				message.setMessage(Constants.USER_NOT_EXISTS);
+				return ResponseEntity.status(HttpStatus.CONFLICT).body(message);
+			}
+		} catch (Exception e) {
+			log.error("Error occurred In UserServiceImpl UpdatePassword() :" + e.getMessage());
+			message.setMessage(Constants.INTERNAL_SERVER_ERROR);
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(message);
+		}
+	}
+
+	@Override
+	public ResponseEntity<?> getAllUsers() {
+	    log.info("In UserServiceImpl getAllUsers()");
+
+	    GetUserDtoList getUserDtoList = new GetUserDtoList();
+	    List<GetUserDto> userDtoList = new ArrayList<>();
+	    try {
+	        List<User> users = userRepository.findAll();
+	        if (!users.isEmpty()) {
+	            for (User model : users) {
+	                if (!model.isDeletedFlag()) {
+	                    userDtoList.add(convertUserToUserDto(model));
+	                }
+	            }
+	            getUserDtoList.setUsers(userDtoList);
+	            return ResponseEntity.ok(getUserDtoList);
+	        } else {
+	            message.setMessage(Constants.NO_RECORDS_FOUND);
+	            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(message);
+	        }
+	    } catch (Exception e) {
+	        log.error("Error occurred in UserServiceImpl getAllUsers(): {}", e.getMessage());
+	        message.setMessage(Constants.INTERNAL_SERVER_ERROR);
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(message);
+	    }
+	}
+
+
+	@Transactional
+	public ResponseEntity<?> getUserId(long userId) {
+		try {
+			User user = userRepository.getById(userId);
+
+			if (user.isDeletedFlag()) {
+				message.setMessage(Constants.ALREADY_DELETED);
+				return ResponseEntity.status(HttpStatus.CONFLICT).body(message);
+			} else {
+				GetUserDto getUserDto = convertUserToUserDto(user);
+				return ResponseEntity.status(HttpStatus.OK).body(getUserDto);
+			}
+		} catch (NullPointerException e) {
+			log.error("Error occurred in UserServiceImpl getEmployeeById() with employeeById: " + e.getMessage());
+			message.setMessage(Constants.USER_NOT_EXISTS);
+			return ResponseEntity.status(HttpStatus.CONFLICT).body(message);
+		} catch (Exception e) {
+			log.error("Error occurred in UserServiceImpl getuserId() with employeeById: " + e.getMessage());
+			message.setMessage(Constants.INTERNAL_SERVER_ERROR);
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(message);
+		}
+	}
+
+	public ResponseEntity<?> deleteUserId(long userId) {
+		log.info("In UserServiceImpl deleteuserId() with request :" + userId);
+		try {
+			User user = userRepository.getById(userId);
+			if (user != null) {
+				user.setDeletedFlag(true);
+				userRepository.save(user);
+				message.setMessage("delete user sucessfully ");
+				return ResponseEntity.status(HttpStatus.OK).body(message);
+			} else {
+				message.setMessage(Constants.NO_RECORDS_FOUND);
+				return ResponseEntity.status(HttpStatus.CONFLICT).body(message);
+			}
+		} catch (Exception e) {
+			log.error("Error occurred In UserServiceImpl deleteuserId() :" + e.getMessage());
+			message.setMessage(Constants.INTERNAL_SERVER_ERROR);
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(message);
+		}
+	}
+
+	
+	private ResponseEntity<?> updateUserWithEmployeeIdAndEmail(User user, ApprovalRequestDto approvalRequestDto) {
+		try {
+			boolean isSameEmployeeId = user.getEmployeeId() == approvalRequestDto.getEmployeeId();
+			boolean isSameEmail = user.getEmail().equals(approvalRequestDto.getEmail());
+			boolean isEmailUnique = isEmailUnique(approvalRequestDto.getEmail());
+
+			if (isSameEmployeeId) {
+				if (isSameEmail || isEmailUnique) {
+					userRepository.save(setUserModel(user, approvalRequestDto));
+					message.setMessage(Constants.Approved);
+					return ResponseEntity.status(HttpStatus.OK).body(message);
+				} else {
+					message.setMessage(Constants.EMAIL_ALREADY_EXISTS);
+				}
+			} else {
+				User existingUserWithEmployeeId = userRepository.findByEmployeeId(approvalRequestDto.getEmployeeId());
+				if (existingUserWithEmployeeId != null) {
+					message.setMessage(Constants.EMPLOYEE_ID_ALREADY_EXISTS);
+				} else if (isSameEmail || isEmailUnique) {
+					userRepository.save(setUserModel(user, approvalRequestDto));
+					message.setMessage(Constants.Approved);
+					return ResponseEntity.status(HttpStatus.OK).body(message);
+				} else {
+					message.setMessage(Constants.EMAIL_ALREADY_EXISTS);
+				}
+			}
+
+			return ResponseEntity.status(HttpStatus.CONFLICT).body(message);
+		} catch (Exception e) {
+			log.error("Error occurred In updateUserWithEmployeeIdAndEmail(): " + e.getMessage());
+			return null;
+		}
+	}
+
+	private boolean isEmailUnique(String email) {
+		try {
+			User userWithSameEmail = userRepository.findByEmail(email);
+			return userWithSameEmail == null;
+		} catch (Exception e) {
+			log.error("Error occurred In isEmailUnique(): " + e.getMessage());
+			return false;
+		}
+	}
+	
+	@Override
+    public ResponseEntity<?> logout(String token) {
+        blacklistedTokens.add(token); 
+        return ResponseEntity.ok("Logout successful");
+    }
+
+
+	private GetUserDto convertUserToUserDto(User user) {
+		GetUserDto getUserDto = new GetUserDto();
+		getUserDto.setUserId(user.getUserId());
+		getUserDto.setEmployeeId(user.getEmployeeId());
+		getUserDto.setUserId(user.getUserId());
+		getUserDto.setUserName(user.getUserName());
+		getUserDto.setEmail(user.getEmail());
+		getUserDto.setDesignation(user.getDesignation());
+		getUserDto.setRollId(user.getRollId());
+		getUserDto.setDepartment(user.getDepartment());
+		getUserDto.setDeletedFlag(user.isDeletedFlag());
+		
+		getUserDto.setCreatedBy(user.getCreatedBy());
+
+		return getUserDto;
+	}
+
+	private LoginResponseDto createLoginResponse(User user) {
+		LoginResponseDto response = new LoginResponseDto();
+
+		response.setEmployeeId(user.getUserId());
+		response.setRoleId(user.getRollId());
+		response.setDesignation(user.getDesignation());
+		response.setUsername(user.getUserName());
+		response.setCreatedBy(user.getCreatedBy());
+		response.setDepartment(user.getDepartment());
+		response.setMessage(user.getRollId() == 1 ? "Login successfully As admin!!" : Constants.LOGIN_SUCCESSFULL);
+		return response;
+	}
+
+	private User setUserModel(User user, ApprovalRequestDto approvalRequestDto) {
+		user.setEmployeeId(approvalRequestDto.getUserId());
+		user.setUserName(approvalRequestDto.getUserName());
+		user.setDepartment(approvalRequestDto.getDepartment());
+		user.setDesignation(approvalRequestDto.getDesignation());
+		user.setEmail(approvalRequestDto.getEmail());
+		
+		return user;
+	}
+
+	
+	public ResponseEntity<?> getUserByUserEmail(String email) {
+		Message message = new Message();
+		log.info("In UserServiceImpl getUserByUserId() with userId: {}", email);
+
+		try {
+			User user = userRepository.getUserByEmail(email);
+			if (user != null) {
+				if (!user.isDeletedFlag()) {
+					
+					
+					return ResponseEntity.ok(user);
+				} else {
+					message.setMessage("user not found");
+					return ResponseEntity.status(HttpStatus.NOT_FOUND).body(message);
+				}
+			} else {
+				message.setMessage(Constants.NO_RECORDS_FOUND);
+				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(message);
+			}
+
+		} catch (Exception e) {
+			log.error("Error occurred in UserServiceImpl getUserByUserId() with userId: {}", e.getMessage());
+			message.setMessage(Constants.INTERNAL_SERVER_ERROR);
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(message);
+		}
+	}
+	
+}

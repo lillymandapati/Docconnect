@@ -1,0 +1,6 @@
+package com.question.repository;
+
+@Repository
+public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
+    
+}

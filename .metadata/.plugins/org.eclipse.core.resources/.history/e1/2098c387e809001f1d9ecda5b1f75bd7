@@ -1,0 +1,5 @@
+package com.question.serviceImpl;
+
+public class MailService {
+
+}

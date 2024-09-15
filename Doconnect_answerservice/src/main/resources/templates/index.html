@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Answer Management</title>
+</head>
+<body>
+    <h1>Answer Management System</h1>
+
+    <h2>Create Answer</h2>
+    <input type="text" id="userId" placeholder="User ID"><br>
+    <input type="text" id="questionId" placeholder="Question ID"><br>
+    <textarea id="answerText" placeholder="Answer Text"></textarea><br>
+    <button onclick="createAnswer()">Create Answer</button>
+
+    <h2>Update Answer</h2>
+    <input type="text" id="updateId" placeholder="Answer ID"><br>
+    <input type="text" id="updateAnswerText" placeholder="Updated Answer Text"><br>
+    <button onclick="updateAnswer()">Update Answer</button>
+
+    <h2>Get Answer by ID</h2>
+    <input type="text" id="getById" placeholder="Answer ID"><br>
+    <button onclick="getAnswerById()">Get Answer</button>
+
+    <h2>Get All Answers</h2>
+    <button onclick="getAllAnswers()">Get All Answers</button>
+
+    <h2>Deactivate Answer by ID</h2>
+    <input type="text" id="deactivateId" placeholder="Answer ID"><br>
+    <button onclick="deactivateAnswerById()">Deactivate Answer</button>
+
+    <script>
+        function createAnswer() {
+            const userId = document.getElementById('userId').value;
+            const questionId = document.getElementById('questionId').value;
+            const answerText = document.getElementById('answerText').value;
+
+            fetch('/answer/create', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    userId: userId,
+                    questionId: questionId,
+                    answerText: answerText
+                })
+            })
+            .then(response => response.json())
+            .then(data => console.log(data))
+            .catch(error => console.error('Error:', error));
+        }
+
+        function updateAnswer() {
+            const id = document.getElementById('updateId').value;
+            const updateAnswerText = document.getElementById('updateAnswerText').value;
+
+            fetch(`/answer/update?id=${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    answerText: updateAnswerText
+                })
+            })
+            .then(response => response.json())
+            .then(data => console.log(data))
+            .catch(error => console.error('Error:', error));
+        }
+
+        function getAnswerById() {
+            const answerId = document.getElementById('getById').value;
+
+            fetch(`/answer/getAnswerById?answerId=${answerId}`)
+            .then(response => response.json())
+            .then(data => console.log(data))
+            .catch(error => console.error('Error:', error));
+        }
+
+        function getAllAnswers() {
+            fetch('/answer/getAllAnswers')
+            .then(response => response.json())
+            .then(data => console.log(data))
+            .catch(error => console.error('Error:', error));
+        }
+
+        function deactivateAnswerById() {
+            const id = document.getElementById('deactivateId').value;
+
+            fetch(`/answer/deactivateAnswerById?id=${id}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => console.log(data))
+            .catch(error => console.error('Error:', error));
+        }
+    </script>
+</body>
+</html>

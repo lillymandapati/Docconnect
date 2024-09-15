@@ -1,0 +1,28 @@
+package com.question.serviceImpl;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.question.model.ChatMessage;
+import com.question.repository.ChatMessageRepository;
+import com.question.service.ChatService;
+
+@Service
+public class ChatServiceImpl implements ChatService {
+    @Autowired
+    private ChatMessageRepository chatMessageRepository;
+
+    @Override
+    public void sendMessage(ChatMessage message) {
+        chatMessageRepository.save(message);
+    }
+
+    @Override
+    public List<ChatMessage> getChatHistory() {
+        // Fetch chat history from the repository
+        return chatMessageRepository.findAll();
+    }
+}

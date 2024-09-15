@@ -1,0 +1,299 @@
+package com.question.serviceImpl;
+
+import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+
+import com.question.dto.GetQuestionCreationDto;
+import com.question.dto.Message;
+import com.question.dto.QuestionDto;
+import com.question.model.Comment;
+import com.question.model.QuestionModel;
+import com.question.repository.CommentRepository;
+import com.question.repository.QuestionRepository;
+import com.question.service.QuestionService;
+
+import lombok.extern.log4j.Log4j2;
+
+@Log4j2
+@Service
+public class QuestionServiceImpl implements QuestionService {
+
+	@Autowired
+	private QuestionRepository questionRepository;
+	@Autowired
+	private CommentRepository commentRepository;
+	@Autowired
+	private EmailService emailservice;
+	public String getLoggedInUsername() {
+		Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+		if (authentication != null) {
+			log.info("Authentication details: " + authentication);
+			if (authentication.isAuthenticated()) {
+				Object principal = authentication.getPrincipal();
+				if (principal instanceof String) {
+					return (String) principal;
+				} else {
+					log.info("Principal type: " + principal.getClass().getName());
+					return null;
+				}
+			}
+		}
+		return null;
+	}
+
+	@Override
+	public ResponseEntity<?> createQuestion(QuestionDto request) {
+		log.info("In QuestionServiceImpl createQuestion() with request :" + request);
+		Message message = new Message();
+		String loggedInUsername = getLoggedInUsername();
+		QuestionModel questionModel = new QuestionModel();
+		questionModel.setUserId(request.getUserId());
+		questionModel.setTitle(request.getTitle());
+		questionModel.setDescription(request.getDescription());
+		questionModel.setCreationDate(new Timestamp(System.currentTimeMillis()));
+		questionModel.setDeactivatedFlag(false);
+		questionModel.setApproved(false);
+		questionModel.setResolved(false);
+		questionModel.setDiscussionflag(false);
+		questionModel.setCreatedBy(loggedInUsername);
+		questionModel = questionRepository.save(questionModel);
+		message.setMessage("Question created successfully");
+		message.setData(questionModel);
+		return ResponseEntity.status(HttpStatus.CREATED).body(message);
+	}
+
+	@Override
+	public ResponseEntity<?> updateQuestion(Long id, QuestionDto request) {
+		log.info("In QuestionServiceImpl updateQuestion() with request :" + request);
+		Message message = new Message();
+
+		try {
+			QuestionModel existingQuestion = questionRepository.findById(id).get();
+
+			if (existingQuestion == null) {
+				message.setMessage("Question not found");
+				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(message);
+			} else {
+				existingQuestion.setUserId(request.getUserId());
+				existingQuestion.setTitle(request.getTitle());
+				existingQuestion.setDescription(request.getDescription());
+				existingQuestion.setUpdationDate(new Timestamp(System.currentTimeMillis()));
+				questionRepository.save(existingQuestion);
+				message.setMessage("Question updated successfully");
+				message.setData(existingQuestion);
+				return ResponseEntity.status(HttpStatus.OK).body(message);
+
+			}
+		} catch (Exception e) {
+			log.error("Error occurred In QuestionServiceImpl updateQuestion() :" + e.getMessage());
+			message.setMessage("Internal server error");
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(message + e.getMessage());
+		}
+	}
+
+
+	
+	@Override
+	public ResponseEntity<?> getQuestionById(long questionId) {
+	    log.info("In QuestionServiceImpl getQuestionById() with request: " + questionId);
+	    Message message = new Message();
+	    try {
+	        QuestionModel question = questionRepository.findByQuestionId(questionId);
+
+	        if (question == null) {
+	            message.setMessage("Question not found");
+	            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(message);
+	        } else {
+	            if (question.isDeactivatedFlag()) {
+	                message.setMessage("This question is deactivated");
+	                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(message);
+	            } else {
+	                List<Comment> commentList = commentRepository.findByQuestionQuestionId(questionId);
+	                GetQuestionCreationDto questionDto = new GetQuestionCreationDto();
+	                questionDto.setQuestionId(question.getQuestionId());
+	                questionDto.setUserId(question.getUserId());
+	                questionDto.setTitle(question.getTitle());
+	                questionDto.setDescription(question.getDescription());
+	                questionDto.setCreationDate(question.getCreationDate());
+	                questionDto.setUpdationDate(question.getUpdationDate());
+	                questionDto.setDeactivatedFlag(question.isDeactivatedFlag());
+	                questionDto.setApproved(question.isApproved());
+	                questionDto.setResolved(question.isResolved());
+	                questionDto.setCreatedBy(question.getCreatedBy());
+	                questionDto.setCommentList(commentList);
+
+	                message.setMessage("Question details retrieved successfully");
+	                message.setData(questionDto);
+	                return ResponseEntity.status(HttpStatus.OK).body(message);
+	            }
+	        }
+	    } catch (Exception e) {
+	        log.error("Error occurred in QuestionServiceImpl getQuestionById(): " + e.getMessage());
+	        message.setMessage("Internal server error");
+	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(message);
+	    }
+	}
+
+
+
+	@Override
+	public ResponseEntity<?> getAllQuestions() {
+		log.info("In QuestionServiceImpl getQuestionById() with request :");
+		Message message = new Message();
+		List<QuestionModel> list = questionRepository.findAll();
+		message.setMessage(" successfully");
+		message.setList(list);
+		return ResponseEntity.status(HttpStatus.OK).body(message);
+
+	}
+
+	@Override
+	public ResponseEntity<?> deleteQuestionById(long questionId) {
+		log.info("In QuestionServiceImpl deleteQuestionById() with request :" + questionId);
+		Message message = new Message();
+		try {
+			QuestionModel question = questionRepository.findById(questionId).get();
+
+			if (question != null) {
+				question.setDeactivatedFlag(true);
+				question = questionRepository.save(question);
+
+				message.setMessage("Question deactivated successfully");
+				message.setData(question);
+				return ResponseEntity.status(HttpStatus.OK).body(message);
+
+			} else {
+				message.setMessage("Question not found");
+				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(message);
+			}
+		} catch (Exception e) {
+			log.error("Error occurred In QuestionServiceImpl deleteQuestionById() :" + e.getMessage());
+			message.setMessage("Internal server error");
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(message + e.getMessage());
+		}
+	}
+
+	@Override
+	public ResponseEntity<?> searchByquestionTitle(String questionTitle) {
+		log.info("In QuestionServiceImpl searchByquestionTitle() with request :" + questionTitle);
+
+		Message message = new Message<>();
+
+		try {
+			List<QuestionModel> questions = questionRepository.findByTitleContainingIgnoreCase(questionTitle);
+			if (questions.isEmpty()) {
+				message.setMessage("Question not found" + questionTitle);
+				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(message);
+
+			} else {
+				List<GetQuestionCreationDto> responseDtos = new ArrayList<>();
+				GetQuestionCreationDto questionDto = new GetQuestionCreationDto();
+				QuestionModel question = new QuestionModel();
+				questionDto.setQuestionId(question.getQuestionId());
+				questionDto.setUserId(question.getUserId());
+				questionDto.setTitle(question.getTitle());
+				questionDto.setDescription(question.getDescription());
+				questionDto.setCreationDate(question.getCreationDate());
+				questionDto.setUpdationDate(question.getUpdationDate());
+				questionDto.setDeactivatedFlag(question.isDeactivatedFlag());
+				questionDto.setApproved(question.isApproved());
+				questionDto.setResolved(question.isResolved());
+				questionDto.setCreatedBy(question.getCreatedBy());
+				responseDtos.add(questionDto);
+				message.setMessage("sucess");
+				message.setList(questions);
+				return ResponseEntity.status(HttpStatus.OK).body(message);
+
+			}
+		} catch (Exception e) {
+			log.error("Error occurred In QuestionServiceImpl searchByquestionTitle() :" + e.getMessage());
+			message.setMessage("Internal server error");
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(message + e.getMessage());
+		}
+	}
+
+	@Override
+	public ResponseEntity<?> removeQuestionById(long id) {
+		log.info("In QuestionServiceImpl removeQuestionById() with request :" + id);
+		Message message = new Message<>();
+		try {
+			Optional<QuestionModel> question = questionRepository.findById(id);
+			if (question.isPresent()) {
+				questionRepository.deleteById(id);
+				message.setMessage("Question deleted sucessfully" + id);
+				return ResponseEntity.status(HttpStatus.OK).body(message);
+			} else {
+				message.setMessage("Question not found" + id);
+				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(message);
+			}
+		} catch (Exception e) {
+			log.error("Error occurred In QuestionServiceImpl removeQuestionById() :" + e.getMessage());
+			message.setMessage("Internal server error");
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(message + e.getMessage());
+		}
+
+	}
+
+	@Override
+	public ResponseEntity<?> approveQuestionById(long id) {
+		log.info("In QuestionServiceImpl approveQuestionById() with request :" + id);
+
+		Message message = new Message();
+		try {
+			QuestionModel question = questionRepository.getById(id);
+
+			if (question != null) {
+				question.setApproved(true);
+				question = questionRepository.save(question);
+
+				message.setMessage("Question approved successfully");
+				message.setData(question);
+				return ResponseEntity.status(HttpStatus.OK).body(message);
+
+			} else {
+				message.setMessage("Question not found");
+				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(message);
+			}
+		} catch (Exception e) {
+			log.error("Error occurred In QuestionServiceImpl approveQuestionById() :" + e.getMessage());
+			message.setMessage("Internal server error");
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(message + e.getMessage());
+		}
+	}
+	public ResponseEntity<?> discussionFlagById(long id) {
+		log.info("In QuestionServiceImpl discussionFlagById() with request :" + id);
+
+		Message message = new Message();
+		try {
+			QuestionModel question = questionRepository.getById(id);
+
+			if (question != null) {
+				question.setDiscussionflag(true);
+				question = questionRepository.save(question);
+
+				message.setMessage("Discussion Completed");
+				message.setData(question);
+				return ResponseEntity.status(HttpStatus.OK).body(message);
+
+			} else {
+				message.setMessage("Discussion not Completed");
+				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(message);
+			}
+		} catch (Exception e) {
+			log.error("Error occurred In QuestionServiceImpl discussionFlagById() :" + e.getMessage());
+			message.setMessage("Internal server error");
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(message + e.getMessage());
+		}
+	}
+	
+	
+}

@@ -1,0 +1,16 @@
+package com.admin.controller;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+
+import com.admin.dto.UserDto;
+
+@Controller
+public class WebController {
+	@GetMapping("/add")
+	  public String showRegistrationForm(Model model) {
+	    model.addAttribute("application", new UserDto());
+	    return "index";
+	  }
+}

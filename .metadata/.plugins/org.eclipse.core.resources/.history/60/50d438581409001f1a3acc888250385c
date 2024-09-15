@@ -1,0 +1,84 @@
+package com.admin.controller;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.admin.dto.LoginRequestDto;
+import com.admin.dto.UpdateUserDto;
+import com.admin.dto.UpdateUserPasswordDto;
+import com.admin.dto.UserDto;
+import com.admin.service.UserService;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
+
+@RestController
+@Validated
+@RequestMapping("/admin")
+public class UserRegistrationController {
+
+    @Autowired
+    private UserService userService;
+
+    @PostMapping("/register")
+    public ResponseEntity<?> registerUser(@Valid @RequestBody UserDto request) {
+        return userService.userRegistration(request);
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<?> userLogin(@Valid @RequestBody LoginRequestDto request) {
+        return userService.userLogin(request);
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(HttpServletRequest request, HttpServletResponse response) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null) {
+            new SecurityContextLogoutHandler().logout(request, response, auth);
+        }
+        return ResponseEntity.ok("Logout successful");
+    }
+
+    @PutMapping("/updateUser")
+    public ResponseEntity<?> userUpdate(@Valid @RequestBody UpdateUserDto request) {
+        return userService.userUpdate(request);
+    }
+
+    @PutMapping("/updatePassword")
+    public ResponseEntity<?> changePassword(@Valid @RequestBody UpdateUserPasswordDto passwordDto) {
+        return userService.updatePassword(passwordDto);
+    }
+
+    @GetMapping("/getAllUsers")
+    public ResponseEntity<?> getAllUsers() {
+        return userService.getAllUsers();
+    }
+
+    @GetMapping("/getByUserId")
+    public ResponseEntity<?> getUserById(@RequestParam("userId") long userId) {
+        return userService.getUserId(userId);
+    }
+
+    @DeleteMapping("/deleteByUserId")
+    public ResponseEntity<?> deleteByEmployeeId(@RequestParam("userId") long userId) {
+        return userService.deleteUserId(userId);
+    }
+
+    @GetMapping("/get")
+    public ResponseEntity<?> getByUsername(@RequestParam("username") String username) {
+        return userService.getUserByUserEmail(username);
+    }
+}

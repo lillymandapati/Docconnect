@@ -1,0 +1,121 @@
+package com.admin.config;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationProvider;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.stereotype.Component;
+import org.springframework.web.servlet.HandlerExceptionResolver;
+import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
+
+import com.admin.service.impl.CustomUserDetailsService;
+import com.admin.util.RolesConstants;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+	// ,"/User/**","/Roles/**"
+	private static final String[] WHITE_LISTED_API = { "/swagger-resources/**", "/swagger-ui*/**", "/v2/api-docs",
+			"/v3/api-docs/**", "/webjars/**", "/admin/register","/admin/login","/v1/admin/register","/h2-console/**","/v1/user/userRegistration","/v1/user/login","/admin/get","/add","/login","/registration.html"};
+
+	@Autowired
+	private CustomUserDetailsService userDetailsService;
+
+	@Autowired
+	private JwtFilter jwtFilter;
+	@Autowired
+	private JwtUtil jwtUtil;
+	@Autowired
+	private JwtAuthenticationEntryPoint entryPoint;
+	@Autowired
+	private AccessDeniedHandler accessDeniedHandler;
+
+
+	@Autowired
+	private AuthEntryPoint authEntryPoint;
+
+	@Autowired
+	private UserDetailsService userDetailService;
+	@Bean
+	public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
+	    httpSecurity.csrf(AbstractHttpConfigurer::disable)
+	                .headers().frameOptions().disable().and() 
+	                .authorizeHttpRequests(authorize -> authorize
+	                        .requestMatchers(WHITE_LISTED_API).permitAll()
+	                        .requestMatchers("/h2-console/**","/login").permitAll() 
+	                        .requestMatchers(RolesConstants.ADMIN).hasAnyRole("ADMIN")
+	                        .requestMatchers(RolesConstants.USER).hasAnyRole("USER", "ADMIN")
+	                        .anyRequest().authenticated()
+	                )
+	                .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
+	                .authenticationManager(authenticationManager())
+	                .httpBasic(basic -> basic.authenticationEntryPoint(authEntryPoint))
+	                .exceptionHandling(exceptionHandling -> exceptionHandling.authenticationEntryPoint(entryPoint)
+	                        .accessDeniedHandler(accessDeniedHandler))
+	                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+	                .authenticationProvider(authenticationProvider())
+	                .logout(logout -> logout.logoutUrl("/logout")); // Configuring logout URL
+
+	    return httpSecurity.build();
+	}
+
+	
+
+
+	@Component
+	public static class AuthEntryPoint implements AuthenticationEntryPoint {
+		@Autowired
+		@Qualifier("handlerExceptionResolver")
+		private HandlerExceptionResolver resolver;
+
+		@Override
+		public void commence(HttpServletRequest request, HttpServletResponse response,
+				AuthenticationException authException) {
+			resolver.resolveException(request, response, null, authException);
+		}
+	}
+
+	@Bean
+	public AuthenticationProvider authenticationProvider() {
+		DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+		provider.setUserDetailsService(userDetailService);
+		provider.setPasswordEncoder(passwordEncoder());
+		return provider;
+	}
+
+  
+
+	@Bean
+	public AuthenticationManager authenticationManager() {
+		return authentication -> authentication;
+	}
+
+	public void addResourceHandlers(ResourceHandlerRegistry registry) {
+		registry.addResourceHandler("swagger-ui.html").addResourceLocations("classpath:/META-INF/resources/");
+
+		registry.addResourceHandler("/webjars/**").addResourceLocations("classpath:/META-INF/resources/webjars/");
+	}
+
+	@Bean
+	public PasswordEncoder passwordEncoder() {
+		return new BCryptPasswordEncoder();
+	}
+}
